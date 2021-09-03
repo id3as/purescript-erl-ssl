@@ -4,7 +4,6 @@
         , recvImpl/5
         , sendImpl/4
         , closeImpl/1
-        , eqFfi/2
         ]).
 
 connectImpl(Left, Right, Address, Port, Options, Timeout) ->
@@ -45,5 +44,3 @@ closeImpl(Socket) ->
             _ = ssl:close(Socket),
             unit
     end.
-
-eqFfi(A,B) -> A =:= B.
