@@ -65,7 +65,7 @@ import Erl.Data.Binary.IOData (IOData)
 import Erl.Data.List (List)
 import Erl.Data.Tuple (tuple2, tuple3)
 import Erl.Kernel.File (FileName)
-import Erl.Kernel.Inet (ActiveError, ActiveSocket, ConnectAddress, ConnectError, Hostname, Port, SendError, SocketType, activeErrorToPurs, connectErrorToPurs, optionsToErl, sendErrorToPurs)
+import Erl.Kernel.Inet (class Socket, ActiveError, ActiveSocket, ConnectAddress, ConnectError, Hostname, Port, SendError, SocketType, activeErrorToPurs, connectErrorToPurs, optionsToErl, sendErrorToPurs)
 import Erl.Kernel.Inet as Inet
 import Erl.Kernel.Tcp as Tcp
 import Erl.Otp.Types.Crypto as Crypto
@@ -80,6 +80,11 @@ import Record as Record
 import Unsafe.Reference (unsafeRefEq)
 
 foreign import data SslSocket :: SocketType -> Type
+
+instance socketSslSocket :: Socket SslSocket where
+  send = send
+  recv = recv
+  close = close
 
 data AntiReplay
   = TenK
