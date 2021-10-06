@@ -52,7 +52,6 @@ module Erl.Ssl
   ) where
 
 import Prelude
-
 import ConvertableOptions (class ConvertOption, class ConvertOptionsWithDefaults, convertOptionsWithDefaults)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe')
@@ -65,7 +64,7 @@ import Erl.Data.Binary.IOData (IOData)
 import Erl.Data.List (List)
 import Erl.Data.Tuple (tuple2, tuple3)
 import Erl.Kernel.File (FileName)
-import Erl.Kernel.Inet (class Socket, ActiveError, ActiveSocket, ConnectAddress, ConnectError, Hostname, Port, SendError, SocketType, activeErrorToPurs, connectErrorToPurs, optionsToErl, sendErrorToPurs)
+import Erl.Kernel.Inet (class Socket, ActiveError, ActiveSocket, ConnectAddress, ConnectError, ConnectedSocket, Hostname, PassiveSocket, Port, SendError, SocketMessageBehaviour, SocketType, activeErrorToPurs, connectErrorToPurs, optionsToErl, sendErrorToPurs)
 import Erl.Kernel.Inet as Inet
 import Erl.Kernel.Tcp as Tcp
 import Erl.Otp.Types.Crypto as Crypto
@@ -79,9 +78,13 @@ import Prim.Row as Row
 import Record as Record
 import Unsafe.Reference (unsafeRefEq)
 
-foreign import data SslSocket :: SocketType -> Type
+foreign import data SslSocket :: SocketMessageBehaviour -> SocketType -> Type
 
-instance socketSslSocket :: Socket SslSocket where
+instance Socket (SslSocket ActiveSocket) where
+  send = send
+  recv = recv
+  close = close
+instance Socket (SslSocket PassiveSocket) where
   send = send
   recv = recv
   close = close
@@ -912,13 +915,13 @@ forcedOptions =
   { mode: Inet.BinaryData
   }
 
--- todo - need additional phantom type on tcpsocket to indicate if passive - if so, cannot allow active to be set
 connectPassive ::
   forall options.
+  Row.Lacks "active" options =>
   Row.Union (ForcedOptions ()) options (ForcedOptions options) =>
   Row.Nub (ForcedOptions options) (ForcedOptions options) =>
   ConvertOptionsWithDefaults OptionToMaybe (Record ConnectOptions) (Record (ForcedOptions options)) (Record (ForcedOptions ConnectOptions)) =>
-  ConnectAddress -> Port -> Record options -> Timeout -> Effect (Either ConnectError (SslSocket ActiveSocket))
+  ConnectAddress -> Port -> Record options -> Timeout -> Effect (Either ConnectError (SslSocket PassiveSocket ConnectedSocket))
 connectPassive address port options timeout = do
   let
     addressErl = toErl address
@@ -930,13 +933,13 @@ connectPassive address port options timeout = do
     optionsErl = optionsToErl merged { active = Just Inet.Passive }
   liftEffect $ connectImpl (errorToLeft <<< connectErrorToPurs) Right addressErl port optionsErl (toErl timeout)
 
-close :: forall socketType. SslSocket socketType -> Effect Unit
+close :: forall socketType socketMessageBehaviour. SslSocket socketMessageBehaviour socketType -> Effect Unit
 close = closeImpl
 
-recv :: SslSocket ActiveSocket -> NonNegInt -> Timeout -> Effect (Either ActiveError Binary)
+recv :: forall socketMessageBehaviour. SslSocket socketMessageBehaviour ConnectedSocket -> NonNegInt -> Timeout -> Effect (Either ActiveError Binary)
 recv socket length timeout = recvImpl (errorToLeft <<< activeErrorToPurs) Right socket length (toErl timeout)
 
-send :: SslSocket ActiveSocket -> IOData -> Effect (Either SendError Unit)
+send :: forall socketMessageBehaviour. SslSocket socketMessageBehaviour ConnectedSocket -> IOData -> Effect (Either SendError Unit)
 send = sendImpl (errorToLeft <<< sendErrorToPurs) Right
 
 errorToLeft :: forall a b. Maybe a -> Either a b
@@ -945,29 +948,32 @@ errorToLeft = Left <<< fromMaybe' (\_ -> unsafeCrashWith "invalidError")
 ------------------------------------------------------------------------------
 -- FFI
 foreign import connectImpl ::
-  (Foreign -> Either ConnectError (SslSocket ActiveSocket)) ->
-  ((SslSocket ActiveSocket) -> Either ConnectError (SslSocket ActiveSocket)) ->
+  forall socketMessageBehaviour.
+  (Foreign -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
+  ((SslSocket socketMessageBehaviour ConnectedSocket) -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
   Foreign ->
   Int ->
   List Foreign ->
   Foreign ->
-  Effect (Either ConnectError (SslSocket ActiveSocket))
+  Effect (Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
 
 foreign import closeImpl ::
-  forall socketType.
-  SslSocket socketType -> Effect Unit
+  forall socketType socketMessageBehaviour.
+  SslSocket socketMessageBehaviour socketType -> Effect Unit
 
 foreign import recvImpl ::
+  forall socketMessageBehaviour.
   (Foreign -> Either ActiveError Binary) ->
   (Binary -> Either ActiveError Binary) ->
-  SslSocket ActiveSocket ->
+  SslSocket socketMessageBehaviour ConnectedSocket ->
   NonNegInt ->
   Foreign ->
   Effect (Either ActiveError Binary)
 
 foreign import sendImpl ::
+  forall socketMessageBehaviour.
   (Foreign -> Either SendError Unit) ->
   (Unit -> Either SendError Unit) ->
-  SslSocket ActiveSocket ->
+  SslSocket socketMessageBehaviour ConnectedSocket ->
   IOData ->
   Effect (Either SendError Unit)
