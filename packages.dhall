@@ -49,7 +49,7 @@ in upstream
       , "typelevel-prelude"
       , "unsafe-coerce"
       ]
-    , version = "48d2a791ef4a33f2fe35415fbc37319b57e863af"
+    , version = "4a3b98201d5e662ec09040a5634997121e514f3b"
     }
   with unsafe-reference =
     { repo = "https://github.com/purerl/purescript-unsafe-reference.git"
