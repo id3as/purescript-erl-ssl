@@ -80,11 +80,11 @@ import Unsafe.Reference (unsafeRefEq)
 
 foreign import data SslSocket :: SocketMessageBehaviour -> SocketType -> Type
 
-instance Socket (SslSocket ActiveSocket) where
+instance Socket (SslSocket ActiveSocket ConnectedSocket) where
   send = send
   recv = recv
   close = close
-instance Socket (SslSocket PassiveSocket) where
+instance Socket (SslSocket PassiveSocket ConnectedSocket) where
   send = send
   recv = recv
   close = close
