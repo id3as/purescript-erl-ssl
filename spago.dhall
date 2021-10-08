@@ -8,14 +8,13 @@ You can edit this file as you like.
   , "datetime"
   , "effect"
   , "either"
-  , "maybe"
   , "erl-atom"
   , "erl-binary"
-  , "erl-lists"
   , "erl-kernel"
-  , "erl-tuples"
+  , "erl-lists"
   , "erl-logger"
   , "erl-otp-types"
+  , "erl-tuples"
   , "foreign"
   , "maybe"
   , "partial"
@@ -27,4 +26,3 @@ You can edit this file as you like.
 , sources = [ "src/**/*.purs" ]
 , backend = "purerl"
 }
-

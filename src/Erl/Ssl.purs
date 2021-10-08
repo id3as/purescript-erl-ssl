@@ -52,6 +52,7 @@ module Erl.Ssl
   ) where
 
 import Prelude
+
 import ConvertableOptions (class ConvertOption, class ConvertOptionsWithDefaults, convertOptionsWithDefaults)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe')
@@ -952,7 +953,7 @@ foreign import connectImpl ::
   (Foreign -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
   ((SslSocket socketMessageBehaviour ConnectedSocket) -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
   Foreign ->
-  Int ->
+  Port ->
   List Foreign ->
   Foreign ->
   Effect (Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
