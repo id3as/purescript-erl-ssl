@@ -19,7 +19,7 @@ module Erl.Ssl
   , Protocol
   , ClientSessionTickets
   , ServerSessionTickets
-  , Verify
+  , Verify(..)
   , KeyPassword
   , CommonOptions
   , ServerOptions
