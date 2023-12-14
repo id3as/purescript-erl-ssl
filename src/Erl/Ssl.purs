@@ -64,7 +64,6 @@ import Erl.Data.Binary (Binary)
 import Erl.Data.Binary.IOData (IOData)
 import Erl.Data.List (List)
 import Erl.Data.Tuple (tuple2, tuple3)
-import Erl.Kernel.File (FileName)
 import Erl.Kernel.Inet (class Socket, ActiveError, ActiveSocket, ConnectAddress, ConnectError, ConnectedSocket, Hostname, PassiveSocket, Port, SendError, SocketMessageBehaviour, SocketType, activeErrorToPurs, connectErrorToPurs, optionsToErl, sendErrorToPurs)
 import Erl.Kernel.Inet as Inet
 import Erl.Kernel.Tcp as Tcp
@@ -75,6 +74,7 @@ import Foreign (Foreign, unsafeToForeign)
 import Logger (logLevelToErl)
 import Logger as Logger
 import Partial.Unsafe (unsafeCrashWith)
+import Pathy (Abs, File, SandboxedPath)
 import Prim.Row as Row
 import Record as Record
 import Unsafe.Reference (unsafeRefEq)
@@ -85,6 +85,7 @@ instance Socket (SslSocket ActiveSocket ConnectedSocket) where
   send = send
   recv = recv
   close = close
+
 instance Socket (SslSocket PassiveSocket ConnectedSocket) where
   send = send
   recv = recv
@@ -156,12 +157,12 @@ data CipherPrf
 
 derive instance eqCipherPhrf :: Eq CipherPrf
 
-type CipherSuite
-  = { keyExchange :: KeyExchangeAlgorithm
-    , cipher :: Cipher
-    , mac :: CipherMac
-    , prf :: CipherPrf
-    }
+type CipherSuite =
+  { keyExchange :: KeyExchangeAlgorithm
+  , cipher :: Cipher
+  , mac :: CipherMac
+  , prf :: CipherPrf
+  }
 
 data Ciphers
   = CipherSuites (List CipherSuite)
@@ -187,11 +188,11 @@ data Key
   | ECPrivateKey PublicKey.DerEncoded
   | PrivateKeyInfo PublicKey.DerEncoded
   | OtherKey
-    { algorithm :: SignAlgorithm
-    , engine :: Crypto.EngineRef
-    , key_id :: Crypto.KeyId
-    , password :: Crypto.Password
-    }
+      { algorithm :: SignAlgorithm
+      , engine :: Crypto.EngineRef
+      , key_id :: Crypto.KeyId
+      , password :: Crypto.Password
+      }
 
 derive instance eqKey :: Eq Key
 
@@ -279,8 +280,7 @@ data SignScheme
 
 derive instance eqSignScheme :: Eq SignScheme
 
-data SignatureAlgorithm
-  = SignatureAlgorithm Hash SignAlgorithm
+data SignatureAlgorithm = SignatureAlgorithm Hash SignAlgorithm
 
 derive instance eqSignatureAlgo :: Eq SignatureAlgorithm
 
@@ -335,8 +335,7 @@ data TlsLegacyVersion
 
 derive instance eqTlsLegacyVersion :: Eq TlsLegacyVersion
 
-data DtlsLegacyVersion
-  = Dtlsv1
+data DtlsLegacyVersion = Dtlsv1
 
 derive instance eqDtlsLegacyVersion :: Eq DtlsLegacyVersion
 
@@ -393,30 +392,27 @@ instance eqVerifyFnResult :: Eq VerifyFnResult where
   eq (VerifyUnknown fn1) (VerifyUnknown fn2) = unsafeRefEq fn1 fn2
   eq _ _ = false
 
-type VerifyFn
-  = OTPCertificate -> VerifyEvent -> VerifyFnResult
+type VerifyFn = OTPCertificate -> VerifyEvent -> VerifyFnResult
 
-type PartialChainFn
-  = List PublicKey.DerEncoded -> Maybe PublicKey.DerEncoded
+type PartialChainFn = List PublicKey.DerEncoded -> Maybe PublicKey.DerEncoded
 
 data UserLookupFn
   = PskLookup (Binary -> Maybe Binary)
   | SrpLookup
-    ( Binary ->
-      Maybe
-        { srpParams :: SrpParamType
-        , salt :: Binary
-        , derivedKey :: Binary
-        }
-    )
+      ( Binary
+        -> Maybe
+             { srpParams :: SrpParamType
+             , salt :: Binary
+             , derivedKey :: Binary
+             }
+      )
 
 instance eqUserLookupFn :: Eq UserLookupFn where
   eq (PskLookup fn1) (PskLookup fn2) = unsafeRefEq fn1 fn2
   eq (SrpLookup fn1) (SrpLookup fn2) = unsafeRefEq fn1 fn2
   eq _ _ = false
 
-type KeyPassword
-  = String
+type KeyPassword = String
 
 instance toErl_Group :: ToErl Group where
   toErl Secp256r1 = unsafeToForeign $ atom "Secp256r1"
@@ -587,18 +583,19 @@ instance toErl_CrlCheck :: ToErl CrlCheck where
 instance toErl_Ciphers :: ToErl Ciphers where
   toErl (CipherSuites cipherSuites) =
     unsafeToForeign
-      $ ( \{ keyExchange
-          , cipher
-          , mac
-          , prf
-          } ->
+      $
+        ( \{ keyExchange
+           , cipher
+           , mac
+           , prf
+           } ->
             { keyExchange: toErl keyExchange
             , cipher: toErl cipher
             , mac: toErl mac
             , prf: toErl prf
             }
         )
-      <$> cipherSuites
+          <$> cipherSuites
   toErl (OtherCipher cipher) = unsafeToForeign cipher
 
 instance toErl_KeyExchangeAlgorithm :: ToErl KeyExchangeAlgorithm where
@@ -657,41 +654,42 @@ instance toErl_ClientPreferredNextProtocols :: ToErl ClientPreferredNextProtocol
   toErl (ClientPreferredNextProtocols { precedence, client_prefs, defaultProtocol: Nothing }) = unsafeToForeign $ tuple2 (toErl precedence) client_prefs
   toErl (ClientPreferredNextProtocols { precedence, client_prefs, defaultProtocol: Just defaultProtocol }) = unsafeToForeign $ tuple3 (toErl precedence) client_prefs (toErl defaultProtocol)
 
-type CommonOptions r
-  = ( protocol :: Maybe Protocol
-    , handshake :: Maybe HandshakeCompletion
-    , cert :: Maybe (List PublicKey.DerEncoded)
-    , certfile :: Maybe FileName
-    , key :: Maybe Key
-    , keyfile :: Maybe FileName
-    , password :: Maybe KeyPassword
-    , ciphers :: Maybe Ciphers
-    , eccs :: Maybe (List NamedCurve)
-    , signature_algs_cert :: Maybe (List SignScheme)
-    , supported_groups :: Maybe (List Group)
-    , secure_renegotiate :: Maybe Boolean
-    , keep_secrets :: Maybe Boolean
-    , depth :: Maybe Int
-    --, verify_fun :: Maybe VerifyFn
-    , crl_check :: Maybe CrlCheck
-    --, crl_cache :: [any()]
-    , max_handshake_size :: Maybe Int
-    --, partial_chain :: Maybe PartialChainFn
-    , versions :: Maybe (List ProtocolVersion)
-    --, user_lookup_fun :: Maybe UserLookupFn
-    , log_level :: Maybe LogLevel
-    , hibernate_after :: Maybe Milliseconds
-    , padding_check :: Maybe Boolean
-    , beast_mitigation :: Maybe BeastMitigation
-    , key_update_at :: Maybe PosInt
-    , middlebox_comp_mode :: Maybe Boolean
-    | r
-    )
+type CommonOptions r =
+  ( protocol :: Maybe Protocol
+  , handshake :: Maybe HandshakeCompletion
+  , cert :: Maybe (List PublicKey.DerEncoded)
+  , certfile :: Maybe (SandboxedPath Abs File)
+  , key :: Maybe Key
+  , keyfile :: Maybe (SandboxedPath Abs File)
+  , password :: Maybe KeyPassword
+  , ciphers :: Maybe Ciphers
+  , eccs :: Maybe (List NamedCurve)
+  , signature_algs_cert :: Maybe (List SignScheme)
+  , supported_groups :: Maybe (List Group)
+  , secure_renegotiate :: Maybe Boolean
+  , keep_secrets :: Maybe Boolean
+  , depth :: Maybe Int
+  --, verify_fun :: Maybe VerifyFn
+  , crl_check :: Maybe CrlCheck
+  --, crl_cache :: [any()]
+  , max_handshake_size :: Maybe Int
+  --, partial_chain :: Maybe PartialChainFn
+  , versions :: Maybe (List ProtocolVersion)
+  --, user_lookup_fun :: Maybe UserLookupFn
+  , log_level :: Maybe LogLevel
+  , hibernate_after :: Maybe Milliseconds
+  , padding_check :: Maybe Boolean
+  , beast_mitigation :: Maybe BeastMitigation
+  , key_update_at :: Maybe PosInt
+  , middlebox_comp_mode :: Maybe Boolean
+  | r
+  )
 
-defaultCommonOptions ::
-  forall r.
-  Row.Union r (CommonOptions ()) (CommonOptions r) =>
-  Record r -> Record (CommonOptions r)
+defaultCommonOptions
+  :: forall r
+   . Row.Union r (CommonOptions ()) (CommonOptions r)
+  => Record r
+  -> Record (CommonOptions r)
 defaultCommonOptions r =
   Record.union r
     { protocol: Nothing
@@ -724,50 +722,46 @@ defaultCommonOptions r =
     }
 
 -- todo - this is not at all clear from the docs...
-type ServerReuseSessionFn
-  = Binary -> PublicKey.DerEncoded -> Int -> Cipher -> Boolean
+type ServerReuseSessionFn = Binary -> PublicKey.DerEncoded -> Int -> Cipher -> Boolean
 
-type SniFn
-  = Hostname -> List (Record (ServerOptions (CommonOptions ())))
+type SniFn = Hostname -> List (Record (ServerOptions (CommonOptions ())))
 
-type AppLevelProtocol
-  = Binary
+type AppLevelProtocol = Binary
 
-type PskIdentity
-  = String
+type PskIdentity = String
 
-type SrpIdentity
-  = String
+type SrpIdentity = String
 
-type ServerOptions r
-  = ( cacerts :: Maybe (List PublicKey.DerEncoded)
-    , cacertfile :: Maybe FileName
-    , dh :: Maybe Binary -- todo - merge
-    , dhfile :: Maybe FileName
-    , verify :: Maybe Verify
-    , fail_if_no_peer_cert :: Maybe Boolean
-    , reuse_sessions :: Maybe Boolean
-    --, reuse_session :: Maybe ServerReuseSessionFn
-    , alpn_preferred_protocols :: Maybe (List AppLevelProtocol)
-    , next_protocols_advertised :: Maybe (List AppLevelProtocol)
-    , psk_identity :: Maybe PskIdentity
-    , honor_cipher_order :: Maybe Boolean
-    --, sni_hosts :: List (Tuple2 Hostname (ServerOptions (CommonOptions ()))) -- todo - more complicated due to recursion...
-    --, sni_fun :: SniFn
-    , honor_ecc_order :: Maybe Boolean
-    , client_renegotiation :: Maybe Boolean
-    , signature_algs :: Maybe (List SignatureAlgorithm)
-    , session_tickets :: Maybe ServerSessionTickets
-    , anti_replay :: Maybe AntiReplay
-    , cookie :: Maybe Boolean
-    , early_data :: Maybe Binary
-    | r
-    )
+type ServerOptions r =
+  ( cacerts :: Maybe (List PublicKey.DerEncoded)
+  , cacertfile :: Maybe (SandboxedPath Abs File)
+  , dh :: Maybe Binary -- todo - merge
+  , dhfile :: Maybe (SandboxedPath Abs File)
+  , verify :: Maybe Verify
+  , fail_if_no_peer_cert :: Maybe Boolean
+  , reuse_sessions :: Maybe Boolean
+  --, reuse_session :: Maybe ServerReuseSessionFn
+  , alpn_preferred_protocols :: Maybe (List AppLevelProtocol)
+  , next_protocols_advertised :: Maybe (List AppLevelProtocol)
+  , psk_identity :: Maybe PskIdentity
+  , honor_cipher_order :: Maybe Boolean
+  --, sni_hosts :: List (Tuple2 Hostname (ServerOptions (CommonOptions ()))) -- todo - more complicated due to recursion...
+  --, sni_fun :: SniFn
+  , honor_ecc_order :: Maybe Boolean
+  , client_renegotiation :: Maybe Boolean
+  , signature_algs :: Maybe (List SignatureAlgorithm)
+  , session_tickets :: Maybe ServerSessionTickets
+  , anti_replay :: Maybe AntiReplay
+  , cookie :: Maybe Boolean
+  , early_data :: Maybe Binary
+  | r
+  )
 
-defaultServerOptions ::
-  forall r.
-  Row.Union r (ServerOptions ()) (ServerOptions r) =>
-  Record r -> Record (ServerOptions r)
+defaultServerOptions
+  :: forall r
+   . Row.Union r (ServerOptions ()) (ServerOptions r)
+  => Record r
+  -> Record (ServerOptions r)
 defaultServerOptions r =
   Record.union r
     { cacerts: Nothing
@@ -793,8 +787,7 @@ defaultServerOptions r =
     , early_data: Nothing
     }
 
-type ListenOptions
-  = ServerOptions (CommonOptions (Tcp.ListenOptions))
+type ListenOptions = ServerOptions (CommonOptions (Tcp.ListenOptions))
 
 defaultListenOptions :: Record ListenOptions
 defaultListenOptions = defaultServerOptions $ defaultCommonOptions $ Tcp.defaultListenOptions
@@ -826,8 +819,7 @@ data ProtocolPrecedence
 
 derive instance eqProtocolPrecedence :: Eq ProtocolPrecedence
 
-newtype ClientPreferredNextProtocols
-  = ClientPreferredNextProtocols
+newtype ClientPreferredNextProtocols = ClientPreferredNextProtocols
   { precedence :: ProtocolPrecedence
   , client_prefs :: List AppLevelProtocol
   , defaultProtocol :: Maybe AppLevelProtocol
@@ -835,32 +827,33 @@ newtype ClientPreferredNextProtocols
 
 derive newtype instance eqClientPreferredNextProtocols :: Eq ClientPreferredNextProtocols
 
-type ClientOptions r
-  = ( verify :: Maybe Verify
-    , reuse_session :: Maybe ClientReuseSession
-    , reuse_sessions :: Maybe ClientReuseSessions
-    , cacerts :: Maybe (List PublicKey.DerEncoded)
-    , cacertfile :: Maybe FileName
-    , alpn_advertised_protocols :: Maybe (List AppLevelProtocol)
-    , client_preferred_next_protocols :: Maybe ClientPreferredNextProtocols
-    , psk_identity :: Maybe PskIdentity
-    , srp_identity :: Maybe SrpIdentity
-    , server_name_indication :: Maybe Hostname
-    , max_fragment_length :: Maybe MaxFragmentLength
-    -- {customize_hostname_check, customize_hostname_check()} |
-    , signature_algs :: Maybe (List SignatureAlgorithm)
-    , fallback :: Maybe Boolean
-    , session_tickets :: Maybe ClientSessionTickets
-    , use_ticket :: Maybe (List Binary)
-    , early_data :: Maybe Binary
-    | r
-    )
+type ClientOptions r =
+  ( verify :: Maybe Verify
+  , reuse_session :: Maybe ClientReuseSession
+  , reuse_sessions :: Maybe ClientReuseSessions
+  , cacerts :: Maybe (List PublicKey.DerEncoded)
+  , cacertfile :: Maybe (SandboxedPath Abs File)
+  , alpn_advertised_protocols :: Maybe (List AppLevelProtocol)
+  , client_preferred_next_protocols :: Maybe ClientPreferredNextProtocols
+  , psk_identity :: Maybe PskIdentity
+  , srp_identity :: Maybe SrpIdentity
+  , server_name_indication :: Maybe Hostname
+  , max_fragment_length :: Maybe MaxFragmentLength
+  -- {customize_hostname_check, customize_hostname_check()} |
+  , signature_algs :: Maybe (List SignatureAlgorithm)
+  , fallback :: Maybe Boolean
+  , session_tickets :: Maybe ClientSessionTickets
+  , use_ticket :: Maybe (List Binary)
+  , early_data :: Maybe Binary
+  | r
+  )
 
-defaultClientOptions ::
-  forall r.
-  Row.Union r (ClientOptions ()) (ClientOptions r) =>
-  Row.Nub (ClientOptions r) (ClientOptions r) =>
-  Record r -> Record (ClientOptions r)
+defaultClientOptions
+  :: forall r
+   . Row.Union r (ClientOptions ()) (ClientOptions r)
+  => Row.Nub (ClientOptions r) (ClientOptions r)
+  => Record r
+  -> Record (ClientOptions r)
 defaultClientOptions r =
   Record.disjointUnion r
     { verify: Nothing
@@ -882,14 +875,12 @@ defaultClientOptions r =
     , early_data: Nothing
     }
 
-type ConnectOptions
-  = ClientOptions (CommonOptions (Inet.CommonOptions ()))
+type ConnectOptions = ClientOptions (CommonOptions (Inet.CommonOptions ()))
 
 defaultConnectOptions :: Record ConnectOptions
 defaultConnectOptions = defaultClientOptions $ defaultCommonOptions $ Inet.defaultCommonOptions {}
 
-data OptionToMaybe
-  = OptionToMaybe
+data OptionToMaybe = OptionToMaybe
 
 derive instance eqOptionToMaybe :: Eq OptionToMaybe
 
@@ -900,29 +891,34 @@ else instance convertOption_OptionToMaybe :: ConvertOption OptionToMaybe sym (Ma
 else instance convertOption_OptionToMaybe2 :: ConvertOption OptionToMaybe sym a (Maybe a) where
   convertOption _ _ val = Just val
 
-connectOptions ::
-  forall options.
-  ConvertOptionsWithDefaults OptionToMaybe (Record ConnectOptions) options (Record ConnectOptions) =>
-  options -> Record ConnectOptions
+connectOptions
+  :: forall options
+   . ConvertOptionsWithDefaults OptionToMaybe (Record ConnectOptions) options (Record ConnectOptions)
+  => options
+  -> Record ConnectOptions
 connectOptions options = convertOptionsWithDefaults OptionToMaybe defaultConnectOptions options
 
-type ForcedOptions r
-  = ( mode :: Inet.SocketMode
-    | r
-    )
+type ForcedOptions r =
+  ( mode :: Inet.SocketMode
+  | r
+  )
 
 forcedOptions :: Record (ForcedOptions ())
 forcedOptions =
   { mode: Inet.BinaryData
   }
 
-connectPassive ::
-  forall options.
-  Row.Lacks "active" options =>
-  Row.Union (ForcedOptions ()) options (ForcedOptions options) =>
-  Row.Nub (ForcedOptions options) (ForcedOptions options) =>
-  ConvertOptionsWithDefaults OptionToMaybe (Record ConnectOptions) (Record (ForcedOptions options)) (Record (ForcedOptions ConnectOptions)) =>
-  ConnectAddress -> Port -> Record options -> Timeout -> Effect (Either ConnectError (SslSocket PassiveSocket ConnectedSocket))
+connectPassive
+  :: forall options
+   . Row.Lacks "active" options
+  => Row.Union (ForcedOptions ()) options (ForcedOptions options)
+  => Row.Nub (ForcedOptions options) (ForcedOptions options)
+  => ConvertOptionsWithDefaults OptionToMaybe (Record ConnectOptions) (Record (ForcedOptions options)) (Record (ForcedOptions ConnectOptions))
+  => ConnectAddress
+  -> Port
+  -> Record options
+  -> Timeout
+  -> Effect (Either ConnectError (SslSocket PassiveSocket ConnectedSocket))
 connectPassive address port options timeout = do
   let
     addressErl = toErl address
@@ -948,33 +944,34 @@ errorToLeft = Left <<< fromMaybe' (\_ -> unsafeCrashWith "invalidError")
 
 ------------------------------------------------------------------------------
 -- FFI
-foreign import connectImpl ::
-  forall socketMessageBehaviour.
-  (Foreign -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
-  ((SslSocket socketMessageBehaviour ConnectedSocket) -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket)) ->
-  Foreign ->
-  Port ->
-  List Foreign ->
-  Foreign ->
-  Effect (Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
+foreign import connectImpl
+  :: forall socketMessageBehaviour
+   . (Foreign -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
+  -> ((SslSocket socketMessageBehaviour ConnectedSocket) -> Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
+  -> Foreign
+  -> Port
+  -> List Foreign
+  -> Foreign
+  -> Effect (Either ConnectError (SslSocket socketMessageBehaviour ConnectedSocket))
 
-foreign import closeImpl ::
-  forall socketType socketMessageBehaviour.
-  SslSocket socketMessageBehaviour socketType -> Effect Unit
+foreign import closeImpl
+  :: forall socketType socketMessageBehaviour
+   . SslSocket socketMessageBehaviour socketType
+  -> Effect Unit
 
-foreign import recvImpl ::
-  forall socketMessageBehaviour.
-  (Foreign -> Either ActiveError Binary) ->
-  (Binary -> Either ActiveError Binary) ->
-  SslSocket socketMessageBehaviour ConnectedSocket ->
-  NonNegInt ->
-  Foreign ->
-  Effect (Either ActiveError Binary)
+foreign import recvImpl
+  :: forall socketMessageBehaviour
+   . (Foreign -> Either ActiveError Binary)
+  -> (Binary -> Either ActiveError Binary)
+  -> SslSocket socketMessageBehaviour ConnectedSocket
+  -> NonNegInt
+  -> Foreign
+  -> Effect (Either ActiveError Binary)
 
-foreign import sendImpl ::
-  forall socketMessageBehaviour.
-  (Foreign -> Either SendError Unit) ->
-  (Unit -> Either SendError Unit) ->
-  SslSocket socketMessageBehaviour ConnectedSocket ->
-  IOData ->
-  Effect (Either SendError Unit)
+foreign import sendImpl
+  :: forall socketMessageBehaviour
+   . (Foreign -> Either SendError Unit)
+  -> (Unit -> Either SendError Unit)
+  -> SslSocket socketMessageBehaviour ConnectedSocket
+  -> IOData
+  -> Effect (Either SendError Unit)
