@@ -1,55 +1,61 @@
 module Erl.Ssl
   ( AntiReplay
-  , Key
-  , Ciphers
-  , SignScheme
-  , Group
-  , VerifyFn
-  , VerifyEvent
-  , VerifyFnResult
-  , PartialChainFn
-  , UserLookupFn
-  , ProtocolVersion
-  , LogLevel
-  , OTPCertificate
+  , AppLevelProtocol
   , BeastMitigation
-  , CrlCheck
-  , NamedCurve
-  , HandshakeCompletion
-  , Protocol
-  , ClientSessionTickets
-  , ServerSessionTickets
-  , Verify(..)
-  , KeyPassword
-  , CommonOptions
-  , ServerOptions
+  , Cipher
+  , Ciphers
   , ClientOptions
-  , ListenOptions
-  , ConnectOptions
+  , ClientPreferredNextProtocols
   , ClientReuseSession
   , ClientReuseSessions
-  , AppLevelProtocol
-  , ClientPreferredNextProtocols
-  , PskIdentity
-  , SrpIdentity
+  , ClientSessionTickets
+  , CommonOptions
+  , ConnectOptions
+  , CrlCheck
+  , FailCallbackFun
+  , FqdnFun
+  , Group
+  , HandshakeCompletion
+  , HostnameCheckOption(..)
+  , Key
+  , KeyPassword
+  , ListenOptions
+  , LogLevel
+  , MatchFun
   , MaxFragmentLength
-  , SignatureAlgorithm
-  , ProtocolPrecedence
-  , ServerReuseSessionFn
-  , Cipher
+  , NamedCurve
+  , OTPCertificate
   , OptionToMaybe
+  , PartialChainFn
+  , Protocol
+  , ProtocolPrecedence
+  , ProtocolVersion
+  , PskIdentity
+  , ServerOptions
+  , ServerReuseSessionFn
+  , ServerSessionTickets
+  , SignScheme
+  , SignatureAlgorithm
+  , SrpIdentity
   , SslSocket
-  , defaultCommonOptions
-  , defaultServerOptions
-  , defaultClientOptions
-  , defaultListenOptions
-  , defaultConnectOptions
+  , UserLookupFn
+  , Verify(..)
+  , VerifyEvent
+  , VerifyFn
+  , VerifyFnResult
+  , close
   , connectOptions
   , connectPassive
-  , close
-  , send
+  , defaultClientOptions
+  , defaultCommonOptions
+  , defaultConnectOptions
+  , defaultListenOptions
+  , defaultServerOptions
+  , pkixVerifyHostnameMatchFunHttps
   , recv
-  ) where
+  , send
+  )
+  where
 
 import Prelude
 
@@ -414,6 +420,25 @@ instance eqUserLookupFn :: Eq UserLookupFn where
 
 type KeyPassword = String
 
+foreign import data MatchFun :: Type
+foreign import data FailCallbackFun :: Type
+foreign import data FqdnFun :: Type
+
+data HostnameCheckOption = 
+  MatchFun MatchFun
+  | FailCallback FailCallbackFun
+  | FqdnFun FqdnFun
+derive instance Eq HostnameCheckOption
+
+instance Eq MatchFun where
+  eq f1 f2 = unsafeRefEq f1 f2
+
+instance Eq FailCallbackFun where
+  eq f1 f2 = unsafeRefEq f1 f2
+
+instance Eq FqdnFun where
+  eq f1 f2 = unsafeRefEq f1 f2
+
 instance toErl_Group :: ToErl Group where
   toErl Secp256r1 = unsafeToForeign $ atom "Secp256r1"
   toErl Secp384r1 = unsafeToForeign $ atom "secp384r1"
@@ -654,6 +679,12 @@ instance toErl_ClientPreferredNextProtocols :: ToErl ClientPreferredNextProtocol
   toErl (ClientPreferredNextProtocols { precedence, client_prefs, defaultProtocol: Nothing }) = unsafeToForeign $ tuple2 (toErl precedence) client_prefs
   toErl (ClientPreferredNextProtocols { precedence, client_prefs, defaultProtocol: Just defaultProtocol }) = unsafeToForeign $ tuple3 (toErl precedence) client_prefs (toErl defaultProtocol)
 
+instance ToErl HostnameCheckOption where
+  toErl (MatchFun f) = unsafeToForeign $ tuple2 (atom "match_fun") f
+  toErl (FailCallback f) = unsafeToForeign $ tuple2 (atom "fail_callback") f
+  toErl (FqdnFun f) = unsafeToForeign $ tuple2 (atom "fqdn_fun") f
+
+
 type CommonOptions r =
   ( protocol :: Maybe Protocol
   , handshake :: Maybe HandshakeCompletion
@@ -839,7 +870,7 @@ type ClientOptions r =
   , srp_identity :: Maybe SrpIdentity
   , server_name_indication :: Maybe Hostname
   , max_fragment_length :: Maybe MaxFragmentLength
-  -- {customize_hostname_check, customize_hostname_check()} |
+  , customize_hostname_check :: Maybe (List HostnameCheckOption)
   , signature_algs :: Maybe (List SignatureAlgorithm)
   , fallback :: Maybe Boolean
   , session_tickets :: Maybe ClientSessionTickets
@@ -867,7 +898,7 @@ defaultClientOptions r =
     , srp_identity: Nothing
     , server_name_indication: Nothing
     , max_fragment_length: Nothing
-    -- {customize_hostname_check, customize_hostname_check()} |
+    , customize_hostname_check: Nothing
     , signature_algs: Nothing
     , fallback: Nothing
     , session_tickets: Nothing
@@ -907,6 +938,8 @@ forcedOptions :: Record (ForcedOptions ())
 forcedOptions =
   { mode: Inet.BinaryData
   }
+
+
 
 connectPassive
   :: forall options
@@ -975,3 +1008,5 @@ foreign import sendImpl
   -> SslSocket socketMessageBehaviour ConnectedSocket
   -> IOData
   -> Effect (Either SendError Unit)
+
+foreign import pkixVerifyHostnameMatchFunHttps :: MatchFun

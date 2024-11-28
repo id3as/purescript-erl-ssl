@@ -1,9 +1,12 @@
 -module (erl_ssl@foreign).
+-include_lib("public_key/include/public_key.hrl").
+
 
 -export([ connectImpl/6
         , recvImpl/5
         , sendImpl/4
         , closeImpl/1
+        , pkixVerifyHostnameMatchFunHttps/0
         ]).
 
 connectImpl(Left, Right, Address, Port, Options, Timeout) ->
@@ -44,3 +47,6 @@ closeImpl(Socket) ->
             _ = ssl:close(Socket),
             unit
     end.
+
+pkixVerifyHostnameMatchFunHttps() ->
+    public_key:pkix_verify_hostname_match_fun(https).
