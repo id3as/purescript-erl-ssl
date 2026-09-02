@@ -80,7 +80,7 @@ import Foreign (Foreign, unsafeToForeign)
 import Logger (logLevelToErl)
 import Logger as Logger
 import Partial.Unsafe (unsafeCrashWith)
-import Pathy (Abs, File, SandboxedPath)
+import Erl.Kernel.Filename (Filename)
 import Prim.Row as Row
 import Record as Record
 import Unsafe.Reference (unsafeRefEq)
@@ -689,9 +689,9 @@ type CommonOptions r =
   ( protocol :: Maybe Protocol
   , handshake :: Maybe HandshakeCompletion
   , cert :: Maybe (List PublicKey.DerEncoded)
-  , certfile :: Maybe (SandboxedPath Abs File)
+  , certfile :: Maybe Filename
   , key :: Maybe Key
-  , keyfile :: Maybe (SandboxedPath Abs File)
+  , keyfile :: Maybe Filename
   , password :: Maybe KeyPassword
   , ciphers :: Maybe Ciphers
   , eccs :: Maybe (List NamedCurve)
@@ -765,9 +765,9 @@ type SrpIdentity = String
 
 type ServerOptions r =
   ( cacerts :: Maybe (List PublicKey.DerEncoded)
-  , cacertfile :: Maybe (SandboxedPath Abs File)
+  , cacertfile :: Maybe Filename
   , dh :: Maybe Binary -- todo - merge
-  , dhfile :: Maybe (SandboxedPath Abs File)
+  , dhfile :: Maybe Filename
   , verify :: Maybe Verify
   , fail_if_no_peer_cert :: Maybe Boolean
   , reuse_sessions :: Maybe Boolean
@@ -863,7 +863,7 @@ type ClientOptions r =
   , reuse_session :: Maybe ClientReuseSession
   , reuse_sessions :: Maybe ClientReuseSessions
   , cacerts :: Maybe (List PublicKey.DerEncoded)
-  , cacertfile :: Maybe (SandboxedPath Abs File)
+  , cacertfile :: Maybe Filename
   , alpn_advertised_protocols :: Maybe (List AppLevelProtocol)
   , client_preferred_next_protocols :: Maybe ClientPreferredNextProtocols
   , psk_identity :: Maybe PskIdentity

@@ -50,7 +50,6 @@ workspace:
         - maybe
         - newtype
         - partial
-        - pathy
         - prelude
         - record
         - typelevel-prelude
