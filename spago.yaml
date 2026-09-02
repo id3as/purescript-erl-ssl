@@ -18,6 +18,13 @@ package:
     - record
     - unsafe-reference
   name: erl-ssl
+  test:
+    dependencies:
+      - assert
+      - erl-test-eunit
+      - free
+      - prelude
+    main: Test.Main
 workspace:
   backend:
     cmd: purerl
