@@ -18,13 +18,15 @@ import Erl.Data.Binary (Binary)
 import Erl.Data.List (List)
 import Erl.Kernel.Filename (filename, filenameToString, parseAbsFile, rawFilename, toFilename)
 import Erl.Kernel.Inet (optionsToErl)
-import Erl.Ssl (defaultListenOptions)
+import Erl.Ssl (ServerNameIndication(..), defaultClientOptions, defaultCommonOptions, defaultListenOptions)
 import Erl.Test.EUnit (TestF, runTests, suite, test)
 import Foreign (Foreign)
 import Test.Assert (assertEqual)
 
 main :: Effect Unit
-main = void $ runTests filenameOptionTests
+main = void $ runTests do
+  filenameOptionTests
+  sniOptionTests
 
 filenameOptionTests :: Free TestF Unit
 filenameOptionTests =
@@ -108,3 +110,24 @@ foreign import lookupOptionImpl
   -> String
   -> List Foreign
   -> Maybe Binary
+
+-- | ssl takes server_name_indication as a STRING or `disable`, and refuses a
+-- | binary at connect time. A PureScript String is a binary, so the option has
+-- | its own type; these pin down the term ssl actually receives.
+sniOptionTests :: Free TestF Unit
+sniOptionTests =
+  suite "server_name_indication" do
+    test "a hostname reaches ssl as a charlist, not a binary" do
+      let
+        options = optionsToErl (defaultClientOptions (defaultCommonOptions {})) { server_name_indication = Just (SniHostname "norsk-worker") }
+      assertEqual { actual: sniOptionImpl options, expected: "charlist:norsk-worker" }
+    test "disable reaches ssl as the atom" do
+      let
+        options = optionsToErl (defaultClientOptions (defaultCommonOptions {})) { server_name_indication = Just SniDisable }
+      assertEqual { actual: sniOptionImpl options, expected: "atom:disable" }
+    test "left unset, it contributes no option" do
+      assertEqual { actual: sniOptionImpl (optionsToErl (defaultClientOptions (defaultCommonOptions {}))), expected: "absent" }
+
+-- | How the server_name_indication value is represented, as a tag: charlist,
+-- | atom, binary, or absent.
+foreign import sniOptionImpl :: List Foreign -> String

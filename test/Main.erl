@@ -1,6 +1,6 @@
 -module(test_main@foreign).
 
--export([lookupOptionImpl/4]).
+-export([lookupOptionImpl/4, sniOptionImpl/1]).
 
 %% ssl's options are a proplist of {Key, Value} pairs, and optionsToErl builds
 %% it as opaque terms. Reaching into it from PureScript would need a decoder
@@ -13,4 +13,12 @@ lookupOptionImpl(Just, Nothing, Key, Options) ->
   case lists:keyfind(binary_to_atom(Key), 1, Options) of
     {_, Value} when is_binary(Value) -> Just(Value);
     _ -> Nothing
+  end.
+
+sniOptionImpl(Options) ->
+  case lists:keyfind(server_name_indication, 1, Options) of
+    {_, V} when is_list(V) -> unicode:characters_to_binary(["charlist:", V]);
+    {_, V} when is_atom(V) -> <<"atom:", (atom_to_binary(V))/binary>>;
+    {_, V} when is_binary(V) -> <<"binary:", V/binary>>;
+    false -> <<"absent">>
   end.

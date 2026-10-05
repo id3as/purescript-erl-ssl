@@ -39,6 +39,7 @@ module Erl.Ssl
   , SrpIdentity
   , SslSocket
   , UserLookupFn
+  , ServerNameIndication(..)
   , Verify(..)
   , VerifyEvent
   , VerifyFn
@@ -309,6 +310,24 @@ data ServerSessionTickets
   | Stateless
 
 derive instance eqServerSessionTickets :: Eq ServerSessionTickets
+
+-- | The `server_name_indication` client option. ssl takes the hostname as a
+-- | STRING (a charlist) or the atom `disable`; a binary — which is what a
+-- | PureScript `String` is — is refused at connect time with
+-- | `{options, {server_name_indication, <<"...">>}}`. Every TLS connect that
+-- | set it through this library therefore failed before reaching the wire
+-- | (found 2026-10-05: the Norsk Manager's mTLS channel to its workers).
+data ServerNameIndication
+  = SniHostname Hostname
+  | SniDisable
+
+derive instance eqServerNameIndication :: Eq ServerNameIndication
+
+instance toErl_ServerNameIndication :: ToErl ServerNameIndication where
+  toErl (SniHostname hostname) = hostnameToCharlist hostname
+  toErl SniDisable = unsafeToForeign $ atom "disable"
+
+foreign import hostnameToCharlist :: Hostname -> Foreign
 
 data Verify
   = VerifyNone
@@ -868,7 +887,7 @@ type ClientOptions r =
   , client_preferred_next_protocols :: Maybe ClientPreferredNextProtocols
   , psk_identity :: Maybe PskIdentity
   , srp_identity :: Maybe SrpIdentity
-  , server_name_indication :: Maybe Hostname
+  , server_name_indication :: Maybe ServerNameIndication
   , max_fragment_length :: Maybe MaxFragmentLength
   , customize_hostname_check :: Maybe (List HostnameCheckOption)
   , signature_algs :: Maybe (List SignatureAlgorithm)

@@ -7,6 +7,7 @@
         , sendImpl/4
         , closeImpl/1
         , pkixVerifyHostnameMatchFunHttps/0
+        , hostnameToCharlist/1
         ]).
 
 connectImpl(Left, Right, Address, Port, Options, Timeout) ->
@@ -50,3 +51,7 @@ closeImpl(Socket) ->
 
 pkixVerifyHostnameMatchFunHttps() ->
     public_key:pkix_verify_hostname_match_fun(https).
+
+%% ssl's server_name_indication is inet:hostname() — a string — or `disable`.
+hostnameToCharlist(Hostname) when is_binary(Hostname) -> unicode:characters_to_list(Hostname);
+hostnameToCharlist(Hostname) when is_list(Hostname) -> Hostname.
